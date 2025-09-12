@@ -8,6 +8,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import TestInstructionScreen from '../screens/TestInstructionScreen';
 import TestRecordScreen from '../screens/TestRecordScreen';
 import TestSubmissionScreen from '../screens/TestSubmissionScreen';
+import VideoReviewScreen from '../screens/VideoReviewScreen';
 import { createStackNavigator } from '@react-navigation/stack';
 
 const TestsStack = createStackNavigator();
@@ -17,8 +18,9 @@ function TestsStackScreen() {
     <TestsStack.Navigator>
       <TestsStack.Screen name="TestsList" component={TestsScreen} options={{ title: 'Tests' }} />
       <TestsStack.Screen name="TestInstruction" component={TestInstructionScreen} options={{ title: 'Instructions' }} />
-      <TestsStack.Screen name="TestRecord" component={TestRecordScreen} options={{ title: 'Record Test' }} />
-      <TestsStack.Screen name="TestSubmission" component={TestSubmissionScreen} options={{ title: 'Review Results' }} />
+  <TestsStack.Screen name="TestRecord" component={TestRecordScreen} options={{ title: 'Record Test' }} />
+  <TestsStack.Screen name="VideoReview" component={VideoReviewScreen} options={{ title: 'Review Video' }} />
+  <TestsStack.Screen name="TestSubmission" component={TestSubmissionScreen} options={{ title: 'Review Results' }} />
     </TestsStack.Navigator>
   );
 }

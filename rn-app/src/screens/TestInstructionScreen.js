@@ -29,7 +29,7 @@ export default function TestInstructionScreen({ route, navigation }) {
     if (result.canceled) return;
 
     const asset = result.assets?.[0];
-    if (asset) goToRecord("upload", asset.uri);
+  if (asset) navigation.navigate('VideoReview', { videoUri: asset.uri, test, autoAnalyze: true });
   };
 
   return (

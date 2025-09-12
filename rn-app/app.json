@@ -27,11 +27,19 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "CAMERA",
-        "RECORD_AUDIO"
-      ]
+        "RECORD_AUDIO",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "package": "com.anonymous.rnapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }

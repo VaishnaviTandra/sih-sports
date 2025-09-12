@@ -7,8 +7,8 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { Camera } from "expo-camera";
-import { Video } from "expo-av";
+import * as ExpoCamera from "expo-camera";
+import * as AV from "expo-av"; // if using SDK 54+, replace with expo-video
 
 export default function TestRecordScreen({ route, navigation }) {
   const { test, action, preselectedVideoUri } = route.params || {};
@@ -16,58 +16,87 @@ export default function TestRecordScreen({ route, navigation }) {
   const [recording, setRecording] = useState(false);
   const [videoUri, setVideoUri] = useState(preselectedVideoUri || null);
   const cameraRef = useRef(null);
+  // Resolve Camera and Video components and constants robustly
+  const CameraComp = ExpoCamera && (ExpoCamera.Camera || ExpoCamera.default || ExpoCamera);
+  const VideoComp = AV && (AV.Video || AV.default || AV);
+  const CamConsts = (ExpoCamera && ExpoCamera.Constants)
+    ? ExpoCamera.Constants
+    : (ExpoCamera && ExpoCamera.Camera && ExpoCamera.Camera.Constants)
+    ? ExpoCamera.Camera.Constants
+    : { Type: { back: 'back', front: 'front' }, VideoQuality: {} };
 
-  // Safe fallback for Camera.Constants when running in a client that doesn't
-  // expose the native expo-camera constants (prevents TypeError: Cannot read property 'Type' of undefined)
-  const CamConsts = (Camera && Camera.Constants) ? Camera.Constants : { Type: { back: 'back', front: 'front' }, VideoQuality: {} };
+  // Try different permission APIs depending on expo-camera version
+  const ensureCameraAndMicPermissions = async () => {
+    let cameraStatus = 'denied';
+    let micStatus = 'denied';
+    try {
+      // camera permission
+      if (ExpoCamera.requestCameraPermissionsAsync) {
+        const res = await ExpoCamera.requestCameraPermissionsAsync();
+        cameraStatus = res?.status ?? cameraStatus;
+      } else if (ExpoCamera.requestPermissionsAsync) {
+        const res = await ExpoCamera.requestPermissionsAsync();
+        cameraStatus = res?.status ?? cameraStatus;
+      } else if (ExpoCamera.Camera && ExpoCamera.Camera.requestPermissionsAsync) {
+        const res = await ExpoCamera.Camera.requestPermissionsAsync();
+        cameraStatus = res?.status ?? cameraStatus;
+      } else if (ExpoCamera.getPermissionsAsync) {
+        const res = await ExpoCamera.getPermissionsAsync();
+        cameraStatus = (res && (res.status || (res.camera && res.camera.status))) ?? cameraStatus;
+      }
+
+      // microphone / audio permission
+      if (ExpoCamera.requestMicrophonePermissionsAsync) {
+        const res = await ExpoCamera.requestMicrophonePermissionsAsync();
+        micStatus = res?.status ?? micStatus;
+      } else if (ExpoCamera.requestAudioRecordingPermissionsAsync) {
+        const res = await ExpoCamera.requestAudioRecordingPermissionsAsync();
+        micStatus = res?.status ?? micStatus;
+      } else if (ExpoCamera.getPermissionsAsync) {
+        const res = await ExpoCamera.getPermissionsAsync();
+        micStatus = (res && (res.status || (res.microphone && res.microphone.status))) ?? micStatus;
+      }
+    } catch (err) {
+      console.log('permission helper error', err);
+    }
+    return { cameraStatus, micStatus };
+  };
 
   useEffect(() => {
     (async () => {
-      // If we are here because the user uploaded a video, we don't need camera permissions.
-      if (action === 'upload' && preselectedVideoUri) {
+      if (action === "upload" && preselectedVideoUri) {
         setVideoUri(preselectedVideoUri);
         setHasPermission(true);
         return;
       }
 
-      // Guard permission requests in case expo-camera native helpers are not available
-      if (Camera && Camera.requestCameraPermissionsAsync && Camera.requestMicrophonePermissionsAsync) {
-        try {
-          const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
-          const { status: micStatus } = await Camera.requestMicrophonePermissionsAsync();
-          const granted = cameraStatus === "granted" && micStatus === "granted";
-          setHasPermission(granted);
-          if (!granted) {
-            Alert.alert("Permission required", "Camera and microphone access are needed to record video.");
-          }
-        } catch (err) {
-          console.log('Camera permission error', err);
-          setHasPermission(false);
-          Alert.alert('Camera unavailable', 'Camera permissions cannot be requested in this client. Use Expo Go matching SDK or a development client.');
+      try {
+        const { cameraStatus, micStatus } = await ensureCameraAndMicPermissions();
+        const granted = cameraStatus === 'granted' && micStatus === 'granted';
+        setHasPermission(granted);
+        if (!granted) {
+          Alert.alert('Permission required', 'Camera and microphone access are needed to record video.');
         }
-      } else {
-        console.log('expo-camera native module not available');
+      } catch (err) {
+        console.log('Camera permission error', err);
         setHasPermission(false);
+        Alert.alert('Camera unavailable', 'Cannot request camera permissions. Use matching Expo Go or a development client.');
       }
     })();
   }, []);
 
   const startRecording = async () => {
     if (!cameraRef.current) {
-      console.log("❌ Camera ref not ready");
       Alert.alert("Error", "Camera not ready yet.");
       return;
     }
     try {
-      console.log("▶ Starting recording...");
       setRecording(true);
-      // Use guarded CamConsts for video quality when available
       const quality = (CamConsts && CamConsts.VideoQuality && CamConsts.VideoQuality['480p']) ? CamConsts.VideoQuality['480p'] : undefined;
       const video = await cameraRef.current.recordAsync({ maxDuration: 60, quality });
-      console.log("✅ Video recorded:", video.uri);
       setVideoUri(video.uri);
     } catch (err) {
-      console.log("❌ Recording error:", err);
+      console.log("Recording error:", err);
       Alert.alert("Recording Error", err?.message || "Unknown error");
     } finally {
       setRecording(false);
@@ -76,27 +105,22 @@ export default function TestRecordScreen({ route, navigation }) {
 
   const stopRecording = async () => {
     if (cameraRef.current) {
-      console.log("⏹ Stopping recording...");
       cameraRef.current.stopRecording();
     }
   };
 
   if (hasPermission === null) return <ActivityIndicator />;
-  // If permissions are false and user intended to record, show guidance; if they intended upload but no videoUri, show message.
+
   if (hasPermission === false) {
-    if (action === 'upload') {
-      return (
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>No Uploaded Video</Text>
-          <Text style={{ textAlign: 'center', color: '#475569' }}>No uploaded video was found. Please go back and upload one.</Text>
-        </View>
-      );
-    }
     return (
-      <View style={{ flex: 1, padding: 20, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Camera unavailable</Text>
-        <Text style={{ textAlign: 'center', color: '#475569' }}>
-          The camera or microphone is not available in this client. If you are using Expo Go, make sure you have the matching Expo Go version for SDK 53 or use a custom development client.
+      <View style={styles.center}>
+        <Text style={styles.title}>
+          {action === "upload" ? "No Uploaded Video" : "Camera unavailable"}
+        </Text>
+        <Text style={styles.subtitle}>
+          {action === "upload"
+            ? "No uploaded video found. Please go back and upload one."
+            : "Camera or microphone is not available. Use matching Expo Go or a custom dev client."}
         </Text>
       </View>
     );
@@ -104,33 +128,40 @@ export default function TestRecordScreen({ route, navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
-      {!videoUri && action === "record" && (
-        <Camera
-          style={{ flex: 1 }}
-          ref={cameraRef}
-          // guarded access to Camera.Constants.Type
-          type={CamConsts && CamConsts.Type ? CamConsts.Type.back : 'back'}
-          ratio="16:9"
-          onCameraReady={() => console.log("✅ Camera ready")}
-          onMountError={(err) => {
-            console.log("❌ Camera mount error:", err);
-            Alert.alert("Camera Error", JSON.stringify(err));
-          }}
-        />
+      {!videoUri && action === "record" ? (
+        (CameraComp && (typeof CameraComp === 'function' || typeof CameraComp === 'string')) ? (
+          <CameraComp
+            style={{ flex: 1 }}
+            ref={cameraRef}
+            type={CamConsts && CamConsts.Type ? CamConsts.Type.back : 'back'}
+            ratio="16:9"
+            onCameraReady={() => console.log("Camera ready")}
+            onMountError={(err) => Alert.alert("Camera Error", JSON.stringify(err))}
+          />
+        ) : (
+          <View style={styles.center}>
+            <Text style={styles.title}>Camera component not available</Text>
+            <Text style={styles.subtitle}>Use a matching Expo Go or a dev client that includes native camera modules.</Text>
+          </View>
+        )
+      ) : (
+        videoUri && (
+          (VideoComp && (typeof VideoComp === 'function' || typeof VideoComp === 'string')) ? (
+            <VideoComp
+              source={{ uri: videoUri }}
+              style={{ flex: 1 }}
+              useNativeControls
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={styles.center}>
+              <Text style={styles.title}>Player not available</Text>
+              <Text style={styles.subtitle}>Video playback is not available in this client.</Text>
+            </View>
+          )
+        )
       )}
 
-      {/* If user uploaded a video or we have a recorded uri, show the player */}
-
-      {videoUri && (
-        <Video
-          source={{ uri: videoUri }}
-          style={{ flex: 1 }}
-          useNativeControls
-          resizeMode="contain"
-        />
-      )}
-
-      {/* Controls */}
       <View style={styles.controls}>
         {!videoUri && action === "record" && !recording && (
           <TouchableOpacity style={styles.button} onPress={startRecording}>
@@ -148,9 +179,9 @@ export default function TestRecordScreen({ route, navigation }) {
         {videoUri && (
           <TouchableOpacity
             style={styles.button}
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('VideoReview', { videoUri, test })}
           >
-            <Text style={styles.text}>✅ Done</Text>
+            <Text style={styles.text}>✅ Review & Submit</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -175,4 +206,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
+  center: { flex: 1, padding: 20, justifyContent: "center", alignItems: "center" },
+  title: { fontSize: 18, fontWeight: "700", marginBottom: 8, color: "#fff" },
+  subtitle: { textAlign: "center", color: "#ccc" },
 });
