@@ -5,6 +5,7 @@ import TestsScreen from '../screens/TestsScreen';
 import PerformanceScreen from '../screens/PerformanceScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import PoseScreen from '../screens/PoseScreen';
 import TestInstructionScreen from '../screens/TestInstructionScreen';
 import TestRecordScreen from '../screens/TestRecordScreen';
 import TestSubmissionScreen from '../screens/TestSubmissionScreen';
@@ -32,6 +33,7 @@ export default function MainTabNavigator() {
     <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Tests" component={TestsStackScreen} />
+      <Tab.Screen name="Pose" component={PoseScreen} />
       <Tab.Screen name="Performance" component={PerformanceScreen} />
       <Tab.Screen name="Leaderboard" component={LeaderboardScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
